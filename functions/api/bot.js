@@ -221,5 +221,7 @@ async function handleCardSubmission(context, activity) {
 // ── Helpers ──
 
 function normalizeServiceUrl(url) {
-  return url ? url.replace(/\/+$/, "") : url;
+  if (!url) return url;
+  // Ensure exactly one trailing slash so v3/ paths append correctly
+  return url.replace(/\/+$/, "") + "/";
 }
