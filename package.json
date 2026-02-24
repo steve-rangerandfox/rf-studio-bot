@@ -1,0 +1,19 @@
+{
+  "name": "rf-studio-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Ranger & Fox Studio Bot — Unified Teams bot for deck building, project provisioning, and script-to-storyboard workflows",
+  "scripts": {
+    "dev": "wrangler pages dev public --kv RF_STORE --compatibility-flags nodejs_compat",
+    "deploy": "wrangler pages deploy public --project-name rf-studio-bot",
+    "preview": "wrangler pages dev public --kv RF_STORE --compatibility-flags nodejs_compat --port 8788"
+  },
+  "engines": { "node": ">=20.0.0" },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "wrangler": "^3.109.0"
+  }
+}

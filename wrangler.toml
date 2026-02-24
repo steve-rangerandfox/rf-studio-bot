@@ -1,0 +1,9 @@
+name = "rf-studio-bot"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "public"
+
+[[kv_namespaces]]
+binding = "RF_STORE"
+id = "2f35db380b1b4f32a1ac6f6a27d81df5"
+preview_id = "de04cf49f8c743cc9951ec0566c3d7de"

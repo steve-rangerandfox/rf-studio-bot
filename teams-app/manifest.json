@@ -1,0 +1,58 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "PLACEHOLDER_APP_ID",
+  "developer": {
+    "name": "Ranger & Fox",
+    "websiteUrl": "https://rangerandfox.tv",
+    "privacyUrl": "https://rangerandfox.tv/privacy",
+    "termsOfUseUrl": "https://rangerandfox.tv/terms"
+  },
+  "name": {
+    "short": "RF Studio Bot",
+    "full": "Ranger & Fox Studio Bot"
+  },
+  "description": {
+    "short": "Build decks, provision projects, and create storyboards",
+    "full": "The unified Ranger & Fox studio assistant. Build custom pitch decks from Canva templates, provision new projects across 8 platforms, and parse scripts into AI-powered storyboards."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#FF6B35",
+  "bots": [
+    {
+      "botId": "PLACEHOLDER_BOT_ID",
+      "scopes": ["personal", "team", "groupChat"],
+      "supportsFiles": true,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal", "team", "groupChat"],
+          "commands": [
+            {
+              "title": "deck",
+              "description": "Start building a new pitch deck"
+            },
+            {
+              "title": "newproject",
+              "description": "Provision a new project across all platforms"
+            },
+            {
+              "title": "storyboard",
+              "description": "Parse a script into a visual storyboard"
+            },
+            {
+              "title": "help",
+              "description": "Show all available commands"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["rf-studio-bot.pages.dev"]
+}
