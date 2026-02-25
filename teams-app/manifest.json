@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
   "manifestVersion": "1.16",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "id": "20110dcf-795b-4f7c-8180-9cdbb8e39ffc",
   "developer": {
     "name": "Ranger & Fox",
@@ -21,7 +21,7 @@
     "color": "color.png",
     "outline": "outline.png"
   },
-  "accentColor": "#FF6B35",
+  "accentColor": "#FF0028",
   "bots": [
     {
       "botId": "20110dcf-795b-4f7c-8180-9cdbb8e39ffc",
