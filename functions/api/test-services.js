@@ -6,6 +6,20 @@
  * Returns JSON with pass/fail status for each service.
  */
 
+// Per-fetch timeout (seconds) — prevents one slow API from killing the whole worker
+const FETCH_TIMEOUT_MS = 10_000;
+
+/** Fetch wrapper with automatic timeout */
+async function tfetch(url, opts = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function onRequestGet(context) {
   const { env, request } = context;
 
@@ -18,38 +32,51 @@ export async function onRequestGet(context) {
     return Response.json({ error: "Unauthorized. Pass ?pin=YOUR_ADMIN_PIN" }, { status: 401 });
   }
 
+  // All available tests
+  const allTests = {
+    dropbox: () => testDropbox(env),
+    frameio: () => testFrameIo(env),
+    canva: () => testCanva(env),
+    onedrive: () => testOneDrive(env),
+    clockify: () => testClockify(env),
+    figma: () => testFigma(env),
+    notion: () => testNotion(env),
+    boords: () => testBoords(env),
+    elevenlabs: () => testElevenLabs(env),
+    anthropic: () => testAnthropic(env),
+    teams_bot: () => testTeamsBot(env),
+  };
+
+  // Optional: test a single service via ?service=name
+  const serviceParam = url.searchParams.get("service");
+  const testsToRun = serviceParam
+    ? { [serviceParam]: allTests[serviceParam] }
+    : allTests;
+
+  if (serviceParam && !allTests[serviceParam]) {
+    return Response.json({
+      error: `Unknown service: ${serviceParam}`,
+      available: Object.keys(allTests),
+    }, { status: 400 });
+  }
+
   const results = {};
+  const testNames = Object.keys(testsToRun);
+  const testPromises = testNames.map(name => testsToRun[name]());
 
-  // Run all tests in parallel
-  const tests = [
-    testDropbox(env),
-    testFrameIo(env),
-    testCanva(env),
-    testOneDrive(env),
-    testClockify(env),
-    testFigma(env),
-    testNotion(env),
-    testBoords(env),
-    testElevenLabs(env),
-    testAnthropic(env),
-    testTeamsBot(env),
-  ];
-
-  const testNames = [
-    "dropbox", "frameio", "canva", "onedrive", "clockify",
-    "figma", "notion", "boords", "elevenlabs", "anthropic", "teams_bot",
-  ];
-
-  const settled = await Promise.allSettled(tests);
+  const settled = await Promise.allSettled(testPromises);
 
   for (let i = 0; i < settled.length; i++) {
     const name = testNames[i];
     if (settled[i].status === "fulfilled") {
       results[name] = settled[i].value;
     } else {
+      const err = settled[i].reason;
       results[name] = {
-        status: "error",
-        message: settled[i].reason?.message || String(settled[i].reason),
+        status: err?.name === "AbortError" ? "timeout" : "error",
+        message: err?.name === "AbortError"
+          ? `Request timed out after ${FETCH_TIMEOUT_MS / 1000}s`
+          : (err?.message || String(err)),
       };
     }
   }
@@ -84,7 +111,7 @@ async function testDropbox(env) {
     params.append("refresh_token", refreshToken);
 
     const credentials = btoa(`${appKey}:${appSecret}`);
-    const tokenRes = await fetch("https://api.dropboxapi.com/oauth2/token", {
+    const tokenRes = await tfetch("https://api.dropboxapi.com/oauth2/token", {
       method: "POST",
       headers: {
         Authorization: `Basic ${credentials}`,
@@ -106,7 +133,7 @@ async function testDropbox(env) {
     return { status: "missing_config", message: "DROPBOX_APP_KEY/APP_SECRET/REFRESH_TOKEN (or DROPBOX_ACCESS_TOKEN) not set" };
   }
 
-  const res = await fetch("https://api.dropboxapi.com/2/users/get_current_account", {
+  const res = await tfetch("https://api.dropboxapi.com/2/users/get_current_account", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -128,7 +155,7 @@ async function testFrameIo(env) {
   if (!env.FRAMEIO_TOKEN) {
     return { status: "missing_config", message: "FRAMEIO_TOKEN not set" };
   }
-  const res = await fetch("https://api.frame.io/v2/me", {
+  const res = await tfetch("https://api.frame.io/v2/me", {
     headers: { Authorization: `Bearer ${env.FRAMEIO_TOKEN}` },
   });
   if (!res.ok) {
@@ -154,7 +181,7 @@ async function testCanva(env) {
           if (config.canvaTokenExpiresAt && Date.now() >= config.canvaTokenExpiresAt - 5 * 60 * 1000) {
             // Try to refresh
             if (config.canvaRefreshToken && env.CANVA_CLIENT_ID && env.CANVA_CLIENT_SECRET) {
-              const refreshRes = await fetch("https://api.canva.com/rest/v1/oauth/token", {
+              const refreshRes = await tfetch("https://api.canva.com/rest/v1/oauth/token", {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 body: new URLSearchParams({
@@ -188,7 +215,7 @@ async function testCanva(env) {
     return { status: "missing_config", message: "CANVA_ACCESS_TOKEN not set and no OAuth token in KV. Visit /api/canva-authorize to connect." };
   }
 
-  const res = await fetch("https://api.canva.com/rest/v1/users/me", {
+  const res = await tfetch("https://api.canva.com/rest/v1/users/me", {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
@@ -219,7 +246,7 @@ async function testOneDrive(env) {
   params.append("client_secret", clientSecret);
   params.append("scope", "https://graph.microsoft.com/.default");
 
-  const tokenRes = await fetch(tokenUrl, {
+  const tokenRes = await tfetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params.toString(),
@@ -235,7 +262,7 @@ async function testOneDrive(env) {
   const graphUrl = driveId
     ? `https://graph.microsoft.com/v1.0/drives/${driveId}`
     : "https://graph.microsoft.com/v1.0/drives";
-  const graphRes = await fetch(graphUrl, {
+  const graphRes = await tfetch(graphUrl, {
     headers: { Authorization: `Bearer ${tokenData.access_token}` },
   });
   if (!graphRes.ok) {
@@ -251,7 +278,7 @@ async function testClockify(env) {
   if (!env.CLOCKIFY_API_KEY) {
     return { status: "missing_config", message: "CLOCKIFY_API_KEY not set" };
   }
-  const res = await fetch("https://api.clockify.me/api/v1/user", {
+  const res = await tfetch("https://api.clockify.me/api/v1/user", {
     headers: { "X-Api-Key": env.CLOCKIFY_API_KEY },
   });
   if (!res.ok) {
@@ -269,7 +296,7 @@ async function testFigma(env) {
   }
 
   // Try /v1/me first (needs current_user:read scope)
-  const res = await fetch("https://api.figma.com/v1/me", {
+  const res = await tfetch("https://api.figma.com/v1/me", {
     headers: { "X-Figma-Token": token },
   });
 
@@ -282,7 +309,7 @@ async function testFigma(env) {
   // (the provisioner only needs file scopes, not current_user:read)
   const templateKey = env.FIGMA_TEMPLATE_FILE_KEY;
   if (res.status === 403 && templateKey) {
-    const fileRes = await fetch(`https://api.figma.com/v1/files/${templateKey}?depth=1`, {
+    const fileRes = await tfetch(`https://api.figma.com/v1/files/${templateKey}?depth=1`, {
       headers: { "X-Figma-Token": token },
     });
     if (fileRes.ok) {
@@ -305,7 +332,7 @@ async function testNotion(env) {
   if (!env.NOTION_TOKEN) {
     return { status: "missing_config", message: "NOTION_TOKEN not set" };
   }
-  const res = await fetch("https://api.notion.com/v1/users/me", {
+  const res = await tfetch("https://api.notion.com/v1/users/me", {
     headers: {
       Authorization: `Bearer ${env.NOTION_TOKEN}`,
       "Notion-Version": "2022-06-28",
@@ -326,7 +353,7 @@ async function testBoords(env) {
     return { status: "missing_config", message: "BOORDS_API_KEY (or BOORDS_API_TOKEN) not set" };
   }
   // Try listing projects as a connectivity test
-  const res = await fetch("https://app.boords.com/api/projects", {
+  const res = await tfetch("https://app.boords.com/api/projects", {
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
@@ -358,7 +385,7 @@ async function testElevenLabs(env) {
   if (!env.ELEVENLABS_API_KEY) {
     return { status: "missing_config", message: "ELEVENLABS_API_KEY not set" };
   }
-  const res = await fetch("https://api.elevenlabs.io/v1/user", {
+  const res = await tfetch("https://api.elevenlabs.io/v1/user", {
     headers: { "xi-api-key": env.ELEVENLABS_API_KEY },
   });
   if (!res.ok) {
@@ -380,7 +407,7 @@ async function testAnthropic(env) {
     return { status: "missing_config", message: "ANTHROPIC_API_KEY not set" };
   }
   // Minimal API call — send a tiny message
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await tfetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": env.ANTHROPIC_API_KEY,
@@ -411,7 +438,7 @@ async function testTeamsBot(env) {
   params.append("client_secret", env.TEAMS_APP_SECRET);
   params.append("scope", "https://api.botframework.com/.default");
 
-  const res = await fetch("https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token", {
+  const res = await tfetch("https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params.toString(),
