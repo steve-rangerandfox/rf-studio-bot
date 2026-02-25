@@ -26,7 +26,7 @@ export async function onRequestGet(context) {
 
   // Build the authorization URL
   const redirectUri = `${url.origin}/api/canva-callback`;
-  const scopes = "design:content:write design:content:read design:meta:read";
+  const scopes = "design:content:write design:content:read design:meta:read folder:read folder:write";
   const state = crypto.randomUUID();
 
   const authUrl = new URL("https://www.canva.com/api/oauth/authorize");
