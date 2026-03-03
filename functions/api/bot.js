@@ -77,16 +77,24 @@ export async function onRequestPost(context) {
   try {
     // ── Activity routing ──
     if (type === "message" || type === "invoke") {
+      let result;
       if (value && typeof value === "object" && value.action) {
         // Card submission
-        return await handleCardSubmission(context, body);
+        result = await handleCardSubmission(context, body);
       } else if (text) {
         // Text message
-        return await handleTextMessage(context, body);
+        result = await handleTextMessage(context, body);
       } else if (body.attachments && body.attachments.length > 0) {
         // File attachment — route to storyboard (only feature that accepts files)
-        return await handleStoryboardText(context, body);
+        result = await handleStoryboardText(context, body);
       }
+
+      // Ensure we always return a proper Response (handlers may return undefined)
+      if (result instanceof Response) return result;
+      if (type === "invoke") {
+        return Response.json({ status: 200 }, { status: 200 });
+      }
+      return new Response("OK", { status: 200 });
     }
 
     if (type === "conversationUpdate") {

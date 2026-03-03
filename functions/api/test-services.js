@@ -32,6 +32,141 @@ export async function onRequestGet(context) {
     return Response.json({ error: "Unauthorized. Pass ?pin=YOUR_ADMIN_PIN" }, { status: 401 });
   }
 
+  // Service ID discovery: ?check=discover
+  if (url.searchParams.get("check") === "discover") {
+    const results = {};
+    // Frame.io: list accounts then teams
+    try {
+      const fHeaders = { Authorization: `Bearer ${env.FRAMEIO_TOKEN}` };
+      // Try /v2/me to get account info
+      const meRes = await tfetch("https://api.frame.io/v2/me", { headers: fHeaders });
+      const me = await meRes.json();
+      // Try /v2/accounts/{account_id}/teams
+      const acctId = me.account_id;
+      let teams = [];
+      if (acctId) {
+        const tRes = await tfetch(`https://api.frame.io/v2/accounts/${acctId}/teams`, { headers: fHeaders });
+        const tData = await tRes.json();
+        teams = (Array.isArray(tData) ? tData : []).map(t => ({ id: t.id, name: t.name }));
+      }
+      results.frameio = {
+        currentTeamId: env.FRAMEIO_TEAM_ID || "(not set)",
+        accountId: acctId, teams,
+      };
+    } catch (e) { results.frameio = { error: e.message }; }
+    // OneDrive: list drive root children
+    try {
+      const { getGraphToken } = await import("../../lib/provisioner/services/graph-auth.js");
+      const gToken = await getGraphToken(env);
+      const driveId = env.ONEDRIVE_DRIVE_ID;
+      const oRes = await tfetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/root/children?$select=id,name,folder&$top=20`, {
+        headers: { Authorization: `Bearer ${gToken}` },
+      });
+      const oData = await oRes.json();
+      const rootFolders = (oData.value || []).filter(i => i.folder).map(i => ({ id: i.id, name: i.name }));
+      // Also list Production subfolder children to find 2026
+      const prodFolder = rootFolders.find(f => f.name === "Production");
+      let prodChildren = [];
+      if (prodFolder) {
+        const pRes = await tfetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${prodFolder.id}/children?$select=id,name,folder&$top=20`, {
+          headers: { Authorization: `Bearer ${gToken}` },
+        });
+        const pData = await pRes.json();
+        prodChildren = (pData.value || []).filter(i => i.folder).map(i => ({ id: i.id, name: i.name }));
+      }
+      results.onedrive = {
+        currentRootFolderId: env.ONEDRIVE_ROOT_FOLDER_ID || "(not set)",
+        driveRootFolders: rootFolders,
+        productionSubfolders: prodChildren,
+      };
+    } catch (e) { results.onedrive = { error: e.message }; }
+    // Figma: check template file
+    try {
+      const figToken = env.FIGMA_TOKEN || env.FIGMA_ACCESS_TOKEN;
+      const fileKey = env.FIGMA_TEMPLATE_FILE_KEY;
+      const figRes = await tfetch(`https://api.figma.com/v1/files/${fileKey}?depth=1`, {
+        headers: { "X-Figma-Token": figToken },
+      });
+      const figData = await figRes.json();
+      results.figma = { currentFileKey: fileKey, status: figRes.ok ? "found" : "not_found", name: figData.name || figData.err };
+    } catch (e) { results.figma = { error: e.message }; }
+    // Notion: search databases
+    try {
+      const nToken = env.NOTION_TOKEN;
+      const dbId = env.NOTION_PROJECTS_DB_ID;
+      const searchRes = await tfetch("https://api.notion.com/v1/search", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${nToken}`, "Notion-Version": "2022-06-28", "Content-Type": "application/json" },
+        body: JSON.stringify({ filter: { property: "object", value: "database" }, page_size: 10 }),
+      });
+      const searchData = await searchRes.json();
+      results.notion = {
+        currentDbId: dbId || "(not set)",
+        availableDbs: (searchData.results || []).map(d => ({ id: d.id, title: d.title?.[0]?.plain_text || "untitled" })),
+      };
+    } catch (e) { results.notion = { error: e.message }; }
+    return Response.json(results);
+  }
+
+  // Dropbox path debug: ?check=dropbox-path
+  if (url.searchParams.get("check") === "dropbox-path") {
+    try {
+      const { getDropboxToken } = await import("../../lib/provisioner/services/dropbox-auth.js");
+      const token = await getDropboxToken(env);
+      const templatePath = env.DROPBOX_TEMPLATE_PATH || "(not set)";
+      const rootRes = await tfetch("https://api.dropboxapi.com/2/files/list_folder", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "", limit: 20 }),
+      });
+      const rootData = await rootRes.json();
+      const rootFolders = rootData.entries?.map(e => e.path_display) || [];
+      const metaRes = await tfetch("https://api.dropboxapi.com/2/files/get_metadata", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ path: templatePath }),
+      });
+      const metaData = await metaRes.json();
+      return Response.json({ templatePath, rootFolders, templateMeta: metaData });
+    } catch (err) {
+      return Response.json({ error: err.message }, { status: 500 });
+    }
+  }
+
+  // Quick config check: ?check=config
+  if (url.searchParams.get("check") === "config") {
+    const configVars = {
+      // Dropbox
+      DROPBOX_TEMPLATE_PATH: !!env.DROPBOX_TEMPLATE_PATH,
+      DROPBOX_APP_KEY: !!env.DROPBOX_APP_KEY,
+      DROPBOX_APP_SECRET: !!env.DROPBOX_APP_SECRET,
+      DROPBOX_REFRESH_TOKEN: !!env.DROPBOX_REFRESH_TOKEN,
+      // Frame.io
+      FRAMEIO_TOKEN: !!env.FRAMEIO_TOKEN,
+      FRAMEIO_TEAM_ID: !!env.FRAMEIO_TEAM_ID,
+      // Canva
+      CANVA_ROOT_FOLDER_ID: !!env.CANVA_ROOT_FOLDER_ID,
+      // OneDrive
+      ONEDRIVE_DRIVE_ID: !!env.ONEDRIVE_DRIVE_ID,
+      ONEDRIVE_ROOT_FOLDER_ID: !!env.ONEDRIVE_ROOT_FOLDER_ID,
+      // Clockify
+      CLOCKIFY_API_KEY: !!env.CLOCKIFY_API_KEY,
+      CLOCKIFY_WORKSPACE_ID: !!env.CLOCKIFY_WORKSPACE_ID,
+      // Figma
+      FIGMA_TOKEN: !!(env.FIGMA_TOKEN || env.FIGMA_ACCESS_TOKEN),
+      FIGMA_TEMPLATE_FILE_KEY: !!env.FIGMA_TEMPLATE_FILE_KEY,
+      // Notion
+      NOTION_TOKEN: !!env.NOTION_TOKEN,
+      NOTION_PROJECTS_DB_ID: !!env.NOTION_PROJECTS_DB_ID,
+      // Graph (OneDrive + Teams Chat)
+      AZURE_TENANT_ID: !!(env.AZURE_TENANT_ID || env.GRAPH_TENANT_ID),
+      AZURE_CLIENT_ID: !!(env.AZURE_CLIENT_ID || env.GRAPH_CLIENT_ID),
+      AZURE_CLIENT_SECRET: !!(env.AZURE_CLIENT_SECRET || env.GRAPH_CLIENT_SECRET),
+    };
+    const missing = Object.entries(configVars).filter(([, v]) => !v).map(([k]) => k);
+    return Response.json({ configVars, missing, allSet: missing.length === 0 });
+  }
+
   // All available tests
   const allTests = {
     dropbox: () => testDropbox(env),
