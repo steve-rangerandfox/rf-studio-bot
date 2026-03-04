@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
   "manifestVersion": "1.16",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "id": "20110dcf-795b-4f7c-8180-9cdbb8e39ffc",
   "developer": {
     "name": "Ranger & Fox",
@@ -14,8 +14,8 @@
     "full": "Ranger & Fox Studio Bot"
   },
   "description": {
-    "short": "Build decks, provision projects, and create storyboards",
-    "full": "The unified Ranger & Fox studio assistant. Build custom pitch decks from Canva templates, provision new projects across 8 platforms, and parse scripts into AI-powered storyboards."
+    "short": "Provision projects and create storyboards",
+    "full": "The unified Ranger & Fox studio assistant. Provision new projects across 6 platforms and parse scripts into AI-powered storyboards with Boords and ElevenLabs."
   },
   "icons": {
     "color": "color.png",
@@ -32,10 +32,6 @@
         {
           "scopes": ["personal", "team", "groupChat"],
           "commands": [
-            {
-              "title": "deck",
-              "description": "Start building a new pitch deck"
-            },
             {
               "title": "newproject",
               "description": "Provision a new project across all platforms"
