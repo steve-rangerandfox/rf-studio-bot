@@ -2,7 +2,6 @@
  * RF Studio Bot — Unified Teams Bot Entry Point
  *
  * Routes incoming Teams activities to the appropriate feature handler:
- *   /deck, "new deck"      → Deck Builder
  *   /newproject, "project"  → Project Provisioner
  *   /storyboard, "script"   → Script-to-Storyboard
  *   help, menu, home        → Home card
@@ -14,15 +13,8 @@ import { validateBotToken, getAccessToken } from "../../lib/shared/auth.js";
 import { sendCard, sendText } from "../../lib/shared/send.js";
 import { getState, clearState } from "../../lib/shared/state.js";
 import { buildHomeCard } from "../../lib/home-card.js";
-import { handleDeckText, handleDeckCard } from "../../lib/deck/handler.js";
 import { handleProvisionerText, handleProvisionerCard } from "../../lib/provisioner/handler.js";
 import { handleStoryboardText, handleStoryboardCard } from "../../lib/storyboard/handler.js";
-
-// ── Deck card actions ──
-const DECK_ACTIONS = new Set([
-  "selectPages", "coverInfo", "backToSelect", "backToCover",
-  "generate", "newDeck",
-]);
 
 // ── GET /api/bot — health check & diagnostics ──
 export async function onRequestGet(context) {
@@ -39,7 +31,7 @@ export async function onRequestGet(context) {
     status: "ok",
     bot: "RF Studio Bot",
     version: "1.0.0",
-    features: ["deck-builder", "project-provisioner", "script-storyboard"],
+    features: ["project-provisioner", "script-storyboard"],
     devMode: env.BOT_DEV_MODE === "true",
     hasConfig,
     timestamp: new Date().toISOString(),
@@ -141,7 +133,6 @@ async function handleTextMessage(context, activity) {
   if (text === "cancel" || text === "stop") {
     // Check if there's an active feature and let it handle cancellation
     const state = await getState(env, conversationId);
-    if (state?.feature === "deck") return handleDeckText(context, activity);
     if (state?.feature === "provisioner") return handleProvisionerText(context, activity);
     if (state?.feature === "storyboard") return handleStoryboardText(context, activity);
     // No active feature — just acknowledge
@@ -150,11 +141,6 @@ async function handleTextMessage(context, activity) {
   }
 
   // ── Feature-specific commands ──
-
-  // Deck builder triggers
-  if (text === "deck" || text === "new deck" || text === "/deck" || text.includes("build a deck") || text.includes("build deck")) {
-    return handleDeckText(context, activity);
-  }
 
   // Provisioner triggers
   if (text === "project" || text === "new project" || text === "/newproject" || text === "/project" ||
@@ -170,7 +156,6 @@ async function handleTextMessage(context, activity) {
 
   // ── Check active feature state ──
   const state = await getState(env, conversationId);
-  if (state?.feature === "deck") return handleDeckText(context, activity);
   if (state?.feature === "provisioner") return handleProvisionerText(context, activity);
   if (state?.feature === "storyboard") return handleStoryboardText(context, activity);
 
@@ -185,22 +170,12 @@ async function handleCardSubmission(context, activity) {
   const action = data.action || "";
 
   // Home card actions
-  if (action === "startDeck") {
-    // Synthesize a text message to trigger deck flow
-    return handleDeckText(context, { ...activity, text: "new deck", value: undefined });
-  }
-
   if (action === "startProvisioner") {
     return handleProvisionerText(context, { ...activity, text: "new project", value: undefined });
   }
 
   if (action === "startStoryboard") {
     return handleStoryboardText(context, { ...activity, text: "storyboard", value: undefined });
-  }
-
-  // Deck builder card actions
-  if (DECK_ACTIONS.has(action)) {
-    return handleDeckCard(context, activity);
   }
 
   // Provisioner card action
@@ -216,7 +191,6 @@ async function handleCardSubmission(context, activity) {
   // Unknown action — check state for active feature
   const conversationId = activity.conversation?.id;
   const state = await getState(context.env, conversationId);
-  if (state?.feature === "deck") return handleDeckCard(context, activity);
   if (state?.feature === "provisioner") return handleProvisionerCard(context, activity);
   if (state?.feature === "storyboard") return handleStoryboardCard(context, activity);
 
